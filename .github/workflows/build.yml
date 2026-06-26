@@ -10,7 +10,8 @@ jobs:
       - name: Checkout repository code
         uses: actions/checkout@v4
 
-      # 1. Clone the complete libnx source repository by assembling the path link in memory
+      # 1. Clone and compile the entire libnx system top-to-bottom to guarantee crt0.o is built
+      # Fixed: Running top-level make instead of just the /nx subdirectory
       - name: Compile Native libnx Framework
         run: |
           export PATH=$DEVKITPRO/devkitA64/bin:$PATH
@@ -19,16 +20,16 @@ jobs:
           TARGET_URL=https://github.com/switchbrew/libnx.git
           git clone --depth 1 "$TARGET_URL" libnx_src
           
-          # Compile the official library binaries directly in memory
-          make -C libnx_src/nx -j$(nproc)
+          # Build the entire framework repository top-to-bottom so crt0.o and spec sheets generate
+          make -C libnx_src -j$(nproc)
           
           # Map structural asset dependencies out into the temporary workspace folder
           mkdir -p ./sys_deps/include ./sys_deps/lib
           cp -r libnx_src/nx/include/* ./sys_deps/include/
           
-          # Dynamic fallback copying rules to pull crt0.o and libnx.a no matter where they output
-          find libnx_src/nx -name "libnx.a" -exec cp {} ./sys_deps/lib/ \;
-          find libnx_src/nx -name "crt0.o" -exec cp {} ./sys_deps/lib/ \;
+          # Relocate the freshly compiled binary files
+          find libnx_src -name "libnx.a" -exec cp {} ./sys_deps/lib/ \;
+          find libnx_src -name "crt0.o" -exec cp {} ./sys_deps/lib/ \;
           find libnx_src -name "switch.specs" -exec cp {} ./sys_deps/lib/ \;
 
       # 2. Compile against our newly built, local library files
