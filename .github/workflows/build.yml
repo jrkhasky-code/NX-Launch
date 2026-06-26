@@ -5,25 +5,24 @@ on: [push, pull_request]
 jobs:
   build:
     runs-on: ubuntu-latest
-    # Uses the official, stable Switch cross-compiling image container
-    container: devkitpro/devkit-env:latest
+    # Uses a pre-configured platform development image container that has libnx pre-installed
+    container: ghcr.io/boiler-plate/devkitpro-switch:latest
     steps:
       - name: Checkout repository code
         uses: actions/checkout@v4
 
-      # Runs the native template build commands to safely align internal memory offsets
-      # Since libnx is pre-installed here, we run a direct build setup safely
+      # Compiles using the container's built-in framework paths
       - name: Compile Native NRO
         run: |
           export PATH=$DEVKITPRO/devkitA64/bin:$PATH
           
-          # 1. Compile main.cpp using container system search headers
+          # 1. Compile main.cpp using local platform reference paths
           aarch64-none-elf-g++ -O2 -ffunction-sections -fdata-sections -fPIE -march=armv8-a+crc+crypto -mtune=cortex-a57 -I$DEVKITPRO/libnx/include -c source/main.cpp -o main.o
           
-          # 2. Link using the official hardware spec boundaries to fix the "software closed" crash
+          # 2. Link object safely with position-independent placement parameters (-fPIE)
           aarch64-none-elf-g++ -specs=$DEVKITPRO/libnx/switch.specs -march=armv8-a+crc+crypto -mtune=cortex-a57 -fPIE -pie main.o -L$DEVKITPRO/libnx/lib -lnx -o Launcher-NX.elf
           
-          # 3. Use the container utility to wrap everything into an authenticated NRO payload
+          # 3. Convert the standalone ELF payload directly into your clean executable Switch .nro binary format
           elf2nro Launcher-NX.elf Launcher-NX.nro --title="Launcher-NX" --author="Homebrew Dev" --version="1.0.0"
 
       - name: Upload Launcher-NX
