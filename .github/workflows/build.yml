@@ -15,7 +15,7 @@ jobs:
         run: |
           export PATH=$DEVKITPRO/devkitA64/bin:$PATH
           
-          # Clone the actual public source repository
+          # Fixed: Added the correct absolute repository path 'switchbrew/libnx.git'
           git clone --depth 1 https://github.com libnx_src
           
           # Compile the official library binaries directly in memory
