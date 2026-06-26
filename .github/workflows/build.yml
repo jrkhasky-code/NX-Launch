@@ -10,39 +10,31 @@ jobs:
       - name: Checkout repository code
         uses: actions/checkout@v4
 
-      # 1. Clone the complete libnx source repository and compile libnx.a from scratch
       - name: Compile Native libnx Framework
         run: |
           export PATH=$DEVKITPRO/devkitA64/bin:$PATH
           
-          # Fixed: Added the correct absolute repository path 'switchbrew/libnx.git'
-          git clone --depth 1 https://github.com libnx_src
+          # FORCED FIXED LINK: Pointing directly to the absolute repository path string
+          git clone --depth 1 https://github.com/switchbrew/libnx.git libnx_src
           
-          # Compile the official library binaries directly in memory
           make -C libnx_src/nx -j$(nproc)
           
-          # Move the compiled assets into an easily accessible directory
           mkdir -p ./sys_deps/include ./sys_deps/lib
           cp -r libnx_src/nx/include/* ./sys_deps/include/
           cp libnx_src/nx/lib/libnx.a ./sys_deps/lib/
           cp libnx_src/nx/lib/crt0.o ./sys_deps/lib/
           cp libnx_src/nx/switch.specs ./sys_deps/lib/
 
-      # 2. Compile against our newly built, local library files
       - name: Compile and Link Launcher-NX
         run: |
           export PATH=$DEVKITPRO/devkitA64/bin:$PATH
           
-          # Compile main.cpp using our local system search headers
           aarch64-none-elf-g++ -O2 -ffunction-sections -fdata-sections -fPIE -march=armv8-a+crc+crypto -mtune=cortex-a57 -I./sys_deps/include -c source/main.cpp -o main.o
           
-          # Link explicitly against the newly compiled framework library to fix all relocation errors
           aarch64-none-elf-g++ -specs=./sys_deps/lib/switch.specs -march=armv8-a+crc+crypto -mtune=cortex-a57 -Wl,-Map,Launcher-NX.map -fPIE -pie main.o ./sys_deps/lib/crt0.o -L./sys_deps/lib -lnx -o Launcher-NX.elf
           
-          # Package the tailored binary directly into your clean executable Switch .nro format
           elf2nro Launcher-NX.elf Launcher-NX.nro --title="Launcher-NX" --author="Homebrew Dev" --version="1.0.0"
 
-      # 3. Deliver your completed, stable Launcher-NX file bundle
       - name: Upload Launcher-NX
         uses: actions/upload-artifact@v4
         with:
