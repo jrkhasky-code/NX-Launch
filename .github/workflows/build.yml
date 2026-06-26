@@ -9,13 +9,14 @@ jobs:
       - name: Checkout repository code
         uses: actions/checkout@v4
 
-      # 1. Cleanly initialize the official Switch SDK cross-compiling environment
+      # 1. Initialize the official public Switchbrew cross-compiling environment
       - name: Set up Native Switch Cross-Compiler Tools
         run: |
-          brew tap dborth/switch-tools
-          brew install aarch64-elf-gcc switch-tools
+          # Use the official verified public switchbrew tap to avoid repository credential errors
+          brew tap switchbrew/switch
+          brew install aarch64-switch-elf-gcc switch-tools
           
-          # Automatically map tracking paths so the Makefile finds our tools instantly
+          # Map paths so the Makefile finds our tools instantly
           echo "DEVKITPRO=/opt/devkitpro" >> $GITHUB_ENV
           echo "DEVKITA64=/opt/devkitpro/devkitA64" >> $GITHUB_ENV
 
@@ -24,9 +25,9 @@ jobs:
         run: |
           # Create symbolic links to match standard devkitpro cross-compiler naming variables
           sudo mkdir -p /opt/devkitpro/devkitA64/bin
-          sudo ln -s $(which aarch64-elf-g++) /opt/devkitpro/devkitA64/bin/aarch64-none-elf-g++
-          sudo ln -s $(which aarch64-elf-gcc) /opt/devkitpro/devkitA64/bin/aarch64-none-elf-gcc
-          sudo ln -s $(which aarch64-elf-ar) /opt/devkitpro/devkitA64/bin/aarch64-none-elf-ar
+          sudo ln -s $(which aarch64-switch-elf-g++) /opt/devkitpro/devkitA64/bin/aarch64-none-elf-g++
+          sudo ln -s $(which aarch64-switch-elf-gcc) /opt/devkitpro/devkitA64/bin/aarch64-none-elf-gcc
+          sudo ln -s $(which aarch64-switch-elf-ar) /opt/devkitpro/devkitA64/bin/aarch64-none-elf-ar
           
           # Pull down core hardware layout files to clear the switch_rules dependency inclusions
           sudo mkdir -p /opt/devkitpro/libnx
