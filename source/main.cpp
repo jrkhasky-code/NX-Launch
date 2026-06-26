@@ -1,3 +1,4 @@
+#include <switch.h>
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
@@ -17,7 +18,7 @@ AppItem globalStorageApps[MAX_APPS];
 int instanceCount = 0;
 int globalCount = 0;
 int currentMenuSelection = 0;
-int activeTab = 0; 
+int activeTab = 0; // 0 = HOME (Launch Menu), 1 = TOOLS (Add Apps)
 
 const char* instanceFolder = "sdmc:/switch/Launcher-NX_Games/";
 const char* mainSwitchFolder = "sdmc:/switch/";
@@ -49,7 +50,7 @@ bool copyFile(const char* src, const char* dest) {
         if (target) fclose(target);
         return false;
     }
-    char buffer[4096]; 
+    char buffer[4096];
     size_t bytesRead;
     while ((bytesRead = fread(buffer, 1, sizeof(buffer), source)) > 0) {
         fwrite(buffer, 1, bytesRead, target);
@@ -107,25 +108,59 @@ void drawHekateInterface() {
 }
 
 int main(int argc, char **argv) {
+    consoleInit(NULL); // Official safe graphical window initialization to stop the crashing
     setvbuf(stdout, NULL, _IONBF, 0);
+
     scanFolder(instanceFolder, instanceApps, &instanceCount);
     scanFolder(mainSwitchFolder, globalStorageApps, &globalCount);
 
-    // Completely self-contained interactive simulation logic
-    int mockInputs[] = { 1, 2, 3 }; 
-    int inputLength = sizeof(mockInputs) / sizeof(mockInputs[0]);
+    PadState pad;
+    padInitializeDefault(&pad);
 
-    for (int step = 0; step <= inputLength; step++) {
-        drawHekateInterface();
-        if (step == 0) { activeTab = 1; currentMenuSelection = 0; }
-        else if (step == 1 && globalCount > 0) {
-            char destinationPath[1024];
-            snprintf(destinationPath, sizeof(destinationPath), "%s%s", instanceFolder, globalStorageApps[currentMenuSelection].name);
-            copyFile(globalStorageApps[currentMenuSelection].path, destinationPath);
-            scanFolder(instanceFolder, instanceApps, &instanceCount);
+    while(appletMainLoop()) {
+        padUpdate(&pad);
+        uint64_t kDown = padGetButtonsDown(&pad);
+
+        if (kDown & HidNpadButton_Plus) break;
+
+        if ((kDown & HidNpadButton_L) || (kDown & HidNpadButton_R)) {
+            activeTab = (activeTab == 0) ? 1 : 0;
+            currentMenuSelection = 0;
         }
-        else if (step == 2) { activeTab = 0; currentMenuSelection = 0; }
-        usleep(100000);
+
+        if (kDown & HidNpadButton_Down) {
+            currentMenuSelection++;
+            int max = (activeTab == 0) ? instanceCount : globalCount;
+            if (max > 0 && currentMenuSelection >= max) currentMenuSelection = 0;
+        }
+
+        if (kDown & HidNpadButton_Up) {
+            currentMenuSelection--;
+            if (currentMenuSelection < 0) {
+                int max = (activeTab == 0) ? instanceCount : globalCount;
+                currentMenuSelection = (max > 0) ? max - 1 : 0;
+            }
+        }
+
+        if (kDown & HidNpadButton_A) {
+            if (activeTab == 0 && instanceCount > 0) {
+                if (access(instanceApps[currentMenuSelection].path, F_OK) == 0) {
+                    envSetNextLoad(instanceApps[currentMenuSelection].path, instanceApps[currentMenuSelection].path);
+                    break;
+                }
+            }
+            else if (activeTab == 1 && globalCount > 0) {
+                char destinationPath[512];
+                snprintf(destinationPath, sizeof(destinationPath), "%s%s", instanceFolder, globalStorageApps[currentMenuSelection].name);
+                copyFile(globalStorageApps[currentMenuSelection].path, destinationPath);
+                scanFolder(instanceFolder, instanceApps, &instanceCount);
+            }
+        }
+
+        drawHekateInterface();
+        consoleUpdate(NULL); 
     }
+
+    consoleExit(NULL);
     return 0;
 }
