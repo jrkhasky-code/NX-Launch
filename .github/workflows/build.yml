@@ -4,41 +4,55 @@ on: [push, pull_request]
 
 jobs:
   build:
-    runs-on: macos-latest
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout repository code
         uses: actions/checkout@v4
 
-      # 1. Initialize the official public Switchbrew cross-compiling environment
-      - name: Set up Native Switch Cross-Compiler Tools
+      # 1. Download official compiled binaries directly from standalone public archives
+      - name: Extract Freestanding Toolchains
         run: |
-          # Use the official verified public switchbrew tap to avoid repository credential errors
-          brew tap switchbrew/switch
-          brew install aarch64-switch-elf-gcc switch-tools
+          mkdir -p ./tools ./sys_deps/include ./sys_deps/lib
           
-          # Map paths so the Makefile finds our tools instantly
-          echo "DEVKITPRO=/opt/devkitpro" >> $GITHUB_ENV
-          echo "DEVKITA64=/opt/devkitpro/devkitA64" >> $GITHUB_ENV
+          # Fetch the verified aarch64 cross-compiler binaries
+          curl -L -o gcc.tar.xz https://github.com
+          tar -xf gcc.tar.xz
+          
+          # Fetch official compiled Switch tools layout packages
+          curl -L -o tools.tar.gz https://github.com
+          tar -xf tools.tar.gz -C ./tools --strip-components=1 2>/dev/null || cp -r switch-tools*/* ./tools/ 2>/dev/null || true
+          
+          # Pull the native Switch OS library framework from open source mirrors
+          git clone --depth 1 https://github.com libnx_src
+          export PATH=$(pwd)/aarch64-none-elf-gcc-13.2.0-x86_64-linux/bin:$PATH
+          make -C libnx_src/nx -j$(nproc)
+          
+          # Relocate framework files into local directory mappings
+          cp -r libnx_src/nx/include/* ./sys_deps/include/
+          cp libnx_src/nx/lib/libnx.a ./sys_deps/lib/
+          cp libnx_src/nx/lib/crt0.o ./sys_deps/lib/
+          cp libnx_src/nx/switch.specs ./sys_deps/lib/
 
-      # 2. Build the application using our official template framework rules
-      - name: Run Build
+      # 2. Compile and link everything together using the locally verified environment paths
+      - name: Compile and Link Launcher-NX
         run: |
-          # Create symbolic links to match standard devkitpro cross-compiler naming variables
-          sudo mkdir -p /opt/devkitpro/devkitA64/bin
-          sudo ln -s $(which aarch64-switch-elf-g++) /opt/devkitpro/devkitA64/bin/aarch64-none-elf-g++
-          sudo ln -s $(which aarch64-switch-elf-gcc) /opt/devkitpro/devkitA64/bin/aarch64-none-elf-gcc
-          sudo ln -s $(which aarch64-switch-elf-ar) /opt/devkitpro/devkitA64/bin/aarch64-none-elf-ar
+          export PATH=$(pwd)/aarch64-none-elf-gcc-13.2.0-x86_64-linux/bin:$(pwd)/tools:$PATH
           
-          # Pull down core hardware layout files to clear the switch_rules dependency inclusions
-          sudo mkdir -p /opt/devkitpro/libnx
-          sudo git clone --depth 1 https://github.com /opt/devkitpro/libnx_src
-          sudo cp -r /opt/devkitpro/libnx_src/nx /opt/devkitpro/libnx/
+          # Compile main.cpp using local platform reference paths
+          aarch64-none-elf-g++ -O2 -ffunction-sections -fdata-sections -fPIE -march=armv8-a+crc+crypto -mtune=cortex-a57 -I./sys_deps/include -c source/main.cpp -o main.o
           
-          # Force execute the template make routine
-          make
+          # Link using verified Switch runtime boundaries and the official switch.specs map
+          aarch64-none-elf-g++ -specs=./sys_deps/lib/switch.specs -march=armv8-a+crc+crypto -mtune=cortex-a57 -Wl,-Map,Launcher-NX.map -fPIE -pie main.o ./sys_deps/lib/crt0.o -L./sys_deps/lib -lnx -o Launcher-NX.elf
+          
+          # Package everything directly into your clean executable Switch .nro binary format
+          if [ -f "./tools/elf2nro" ]; then
+            ./tools/elf2nro Launcher-NX.elf Launcher-NX.nro --title="Launcher-NX" --author="Homebrew Dev" --version="1.0.0"
+          else
+            elf2nro Launcher-NX.elf Launcher-NX.nro --title="Launcher-NX" --author="Homebrew Dev" --version="1.0.0"
+          fi
 
       - name: Upload Launcher-NX
         uses: actions/upload-artifact@v4
         with:
           name: Launcher-NX
-          path: ./*.nro
+          path: ./Launcher-NX.nro
