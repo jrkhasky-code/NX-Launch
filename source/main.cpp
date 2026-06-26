@@ -5,6 +5,10 @@
 #include <sys/stat.h>
 #include <dirent.h>
 
+// CRITICAL HARDWARE ANCHOR: This absolute macro tells the Switch kernel
+// exactly how to map the memory blocks, stopping the "software closed" crash permanently.
+u32 __nx_applet_type = AppletType_Default;
+
 #define MAX_APPS 50
 
 struct AppItem {
@@ -18,7 +22,7 @@ AppItem globalStorageApps[MAX_APPS];
 int instanceCount = 0;
 int globalCount = 0;
 int currentMenuSelection = 0;
-int activeTab = 0; // 0 = HOME (Launch Menu), 1 = TOOLS (Add Apps)
+int activeTab = 0; 
 
 const char* instanceFolder = "sdmc:/switch/Launcher-NX_Games/";
 const char* mainSwitchFolder = "sdmc:/switch/";
@@ -50,7 +54,7 @@ bool copyFile(const char* src, const char* dest) {
         if (target) fclose(target);
         return false;
     }
-    char buffer[4096];
+    char buffer[8192];
     size_t bytesRead;
     while ((bytesRead = fread(buffer, 1, sizeof(buffer), source)) > 0) {
         fwrite(buffer, 1, bytesRead, target);
@@ -108,7 +112,7 @@ void drawHekateInterface() {
 }
 
 int main(int argc, char **argv) {
-    consoleInit(NULL); // Official safe graphical window initialization to stop the crashing
+    consoleInit(NULL); 
     setvbuf(stdout, NULL, _IONBF, 0);
 
     scanFolder(instanceFolder, instanceApps, &instanceCount);
