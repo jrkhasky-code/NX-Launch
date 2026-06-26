@@ -10,8 +10,7 @@ jobs:
       - name: Checkout repository code
         uses: actions/checkout@v4
 
-      # 1. Clone and compile the entire libnx system top-to-bottom to guarantee crt0.o is built
-      # Fixed: Running top-level make instead of just the /nx subdirectory
+      # 1. Clone the repository and compile the library files manually to ensure crt0.o generates
       - name: Compile Native libnx Framework
         run: |
           export PATH=$DEVKITPRO/devkitA64/bin:$PATH
@@ -20,16 +19,18 @@ jobs:
           TARGET_URL=https://github.com/switchbrew/libnx.git
           git clone --depth 1 "$TARGET_URL" libnx_src
           
-          # Build the entire framework repository top-to-bottom so crt0.o and spec sheets generate
-          make -C libnx_src -j$(nproc)
+          # Compile the official library binaries directly in memory
+          make -C libnx_src/nx -j$(nproc)
           
           # Map structural asset dependencies out into the temporary workspace folder
           mkdir -p ./sys_deps/include ./sys_deps/lib
           cp -r libnx_src/nx/include/* ./sys_deps/include/
           
-          # Relocate the freshly compiled binary files
+          # CRITICAL MANUAL COMPILATION: Build the startup code directly from raw assembly text source files
+          aarch64-none-elf-gcc -march=armv8-a+crc+crypto -mtune=cortex-a57 -c libnx_src/nx/source/runtime/crt0.s -o ./sys_deps/lib/crt0.o
+          
+          # Relocate the rest of the freshly compiled binary tracking structures
           find libnx_src -name "libnx.a" -exec cp {} ./sys_deps/lib/ \;
-          find libnx_src -name "crt0.o" -exec cp {} ./sys_deps/lib/ \;
           find libnx_src -name "switch.specs" -exec cp {} ./sys_deps/lib/ \;
 
       # 2. Compile against our newly built, local library files
@@ -46,7 +47,6 @@ jobs:
           # Package the tailored binary directly into your clean executable Switch .nro format
           elf2nro Launcher-NX.elf Launcher-NX.nro --title="Launcher-NX" --author="Homebrew Dev" --version="1.0.0"
 
-      # 3. Deliver your completed, stable Launcher-NX file bundle
       - name: Upload Launcher-NX
         uses: actions/upload-artifact@v4
         with:
